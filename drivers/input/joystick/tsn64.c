@@ -39,7 +39,9 @@ MODULE_LICENSE("GPL");
 #define P2			1
 #define P3			2
 #define P4			3
-#define P_OFF		30		
+#define PLAYER_OFFSET		30
+#define PLAYER_MASK 0x3
+
 #define CON_L		29
 #define CON_R		28
 #define CON_CUP		27
@@ -54,8 +56,8 @@ MODULE_LICENSE("GPL");
 #define CON_DDN		18
 #define CON_DL		17
 #define CON_DR		16
-#define ANA_X_OFF	8
-#define ANA_Y_OFF	0
+#define ANA_X_OFFSET	8
+#define ANA_Y_OFFSET	0
 #define ANA_MASK	0xff
 
 struct tsn64_device {
@@ -63,6 +65,7 @@ struct tsn64_device {
 	struct i2c_client *client;
 	int irq;
 	int irq_gpio;
+	uint32_t sample[4];
 };
 
 static int ts64_i2c_read(struct i2c_client *client, int addr, uint32_t *status)
@@ -81,7 +84,7 @@ static int ts64_i2c_read(struct i2c_client *client, int addr, uint32_t *status)
 	msgs[0].buf	= addr_msg;
 
 	msgs[1].addr = client->addr;
-	msgs[1].flags = I2C_M_RD;
+	msgs[1].flags = I2C_M_RD | I2C_M_NOSTART;
 	msgs[1].len	= 4;
 	msgs[1].buf	= status_msg;
 
@@ -92,7 +95,10 @@ static int ts64_i2c_read(struct i2c_client *client, int addr, uint32_t *status)
 		return -EIO;
 	}
 
-	status = (uint32_t *)status_msg;
+	status[0] = status_msg[0];
+	status[0] |= status_msg[1] << 8;
+	status[0] |= status_msg[2] << 16;
+	status[0] |= status_msg[3] << 24;
 
 	return 0;
 }
@@ -104,14 +110,16 @@ static irqreturn_t ts64_irq_thread(int irq, void *dev_id)
 	do {
 		uint32_t status = 0;
 		int err;
+		int player;
 		err = ts64_i2c_read(tsn64->client, 0x0, &status);
 		if(err){
 			printk(KERN_INFO "TS-N64 failed to read i2c.  %d\n", err);
 			break;
 		}
+		player = (status >> PLAYER_OFFSET) & PLAYER_MASK;
 
 		printk(KERN_INFO "TS-N64: Got back 0x%X\n", status);
-	} while(gpio_get_value_cansleep(tsn64->irq_gpio) == 0);
+	} while(gpio_get_value(tsn64->irq_gpio) == 1);
 
 	/*input_report_key(tsn64->input_dev, BTN_JOYSTICK, !val);
 	input_sync(tsn64->input_dev);*/
@@ -148,6 +156,8 @@ static int tsn64_probe(struct i2c_client *client,
 	input_dev = input_allocate_device();
 	tsn64 = kmalloc(sizeof(struct tsn64_device), GFP_KERNEL);
 
+	printk(KERN_INFO "TS-64: Probed\n");
+
 	if (!tsn64 || !input_dev) {
 		dev_err(&client->dev,
 			"Can't allocate memory for device structure\n");
@@ -163,8 +173,10 @@ static int tsn64_probe(struct i2c_client *client,
 	input_dev->dev.parent = &client->dev;
 
 	err = tsn64_probe_dt(client, tsn64);
-	if (err)
+	if (err){
+		printk(KERN_INFO "TS-64: Failed to probe dt\n");
 		goto err_free_mem;
+	}
 
 	/*__set_bit(EV_KEY, input_dev->evbit);
 	__set_bit(EV_ABS, input_dev->evbit);
@@ -185,7 +197,7 @@ static int tsn64_probe(struct i2c_client *client,
 
 	err = request_threaded_irq(tsn64->irq,
 				     NULL, ts64_irq_thread,
-				     IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+				     IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
 				     "tsn64_button", tsn64);
 
 	if (err < 0) {
@@ -199,6 +211,9 @@ static int tsn64_probe(struct i2c_client *client,
 		dev_err(&client->dev, "Failed to register input device\n");
 		goto err_free_irq;
 	}
+
+
+	printk(KERN_INFO "TS-64: Loaded\n");
 
 	i2c_set_clientdata(client, tsn64);
 
