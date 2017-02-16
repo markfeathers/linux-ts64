@@ -132,6 +132,13 @@ config JOYSTICK_TMDC
 
 source "drivers/input/joystick/iforce/Kconfig"
 
+config JOYSTICK_TSN64
+	tristate "TS-N64 Demo board"
+	select GAMEPORT
+	help
+		Say Y here if you have one of the less than 20 TS-N64 demo boards
+		in known existance by this driver writer.
+
 config JOYSTICK_WARRIOR
 	tristate "Logitech WingMan Warrior joystick"
 	select SERIO
