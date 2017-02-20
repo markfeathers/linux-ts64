@@ -65,7 +65,6 @@ struct tsn64_device {
 	struct i2c_client *client;
 	int irq;
 	int irq_gpio;
-	uint32_t sample[4];
 };
 
 static int ts64_i2c_read(struct i2c_client *client, int addr, uint32_t *status)
@@ -118,11 +117,27 @@ static irqreturn_t ts64_irq_thread(int irq, void *dev_id)
 		}
 		player = (status >> PLAYER_OFFSET) & PLAYER_MASK;
 
+		input_report_key(tsn64->input_dev, BTN_TL, status & (1 << CON_L));
+		input_report_key(tsn64->input_dev, BTN_TR, status & (1 << CON_R));
+		input_report_key(tsn64->input_dev, BTN_FORWARD, status & (1 << CON_CUP));
+		input_report_key(tsn64->input_dev, BTN_BACK, status & (1 << CON_CDN));
+		input_report_key(tsn64->input_dev, BTN_LEFT, status & (1 << CON_CL));
+		input_report_key(tsn64->input_dev, BTN_RIGHT, status & (1 << CON_CR));
+		input_report_key(tsn64->input_dev, BTN_A, status & (1 << CON_A));
+		input_report_key(tsn64->input_dev, BTN_B, status & (1 << CON_B));
+		input_report_key(tsn64->input_dev, BTN_Z, status & (1 << CON_Z));
+		input_report_key(tsn64->input_dev, BTN_START, status & (1 << CON_START));
+		input_report_key(tsn64->input_dev, BTN_TRIGGER_HAPPY3, status & (1 << CON_DUP));
+		input_report_key(tsn64->input_dev, BTN_TRIGGER_HAPPY4, status & (1 << CON_DDN));
+		input_report_key(tsn64->input_dev, BTN_TRIGGER_HAPPY1, status & (1 << CON_DL));
+		input_report_key(tsn64->input_dev, BTN_TRIGGER_HAPPY2, status & (1 << CON_DR));
+
+		input_report_abs(tsn64->input_dev, ABS_X, (status >> ANA_X_OFFSET) & ANA_MASK);
+		input_report_abs(tsn64->input_dev, ABS_Y, status & ANA_MASK);
+		input_sync(tsn64->input_dev);
+
 		printk(KERN_INFO "TS-N64: Got back 0x%X\n", status);
 	} while(gpio_get_value(tsn64->irq_gpio) == 1);
-
-	/*input_report_key(tsn64->input_dev, BTN_JOYSTICK, !val);
-	input_sync(tsn64->input_dev);*/
 
 	return IRQ_HANDLED;
 }
@@ -178,14 +193,26 @@ static int tsn64_probe(struct i2c_client *client,
 		goto err_free_mem;
 	}
 
-	/*__set_bit(EV_KEY, input_dev->evbit);
 	__set_bit(EV_ABS, input_dev->evbit);
-	__set_bit(BTN_JOYSTICK, input_dev->keybit);
+	input_set_abs_params(input_dev, ABS_X, -128, 128, 0, 0);
+	input_set_abs_params(input_dev, ABS_Y, -128, 128, 0, 0);
 
-	input_set_abs_params(input_dev, ABS_X,
-		tsn64_MIN_AXIS, tsn64_MAX_AXIS, tsn64_FUZZ, tsn64_FLAT);
-	input_set_abs_params(tsn64->input_dev, ABS_Y,
-		tsn64_MIN_AXIS, tsn64_MAX_AXIS, tsn64_FUZZ, tsn64_FLAT); */
+	__set_bit(EV_KEY, input_dev->evbit);
+
+	__set_bit(BTN_TL, input_dev->keybit);
+	__set_bit(BTN_TR, input_dev->keybit);
+	__set_bit(BTN_FORWARD, input_dev->keybit);
+	__set_bit(BTN_BACK, input_dev->keybit);
+	__set_bit(BTN_LEFT, input_dev->keybit);
+	__set_bit(BTN_RIGHT, input_dev->keybit);
+	__set_bit(BTN_A, input_dev->keybit);
+	__set_bit(BTN_B, input_dev->keybit);
+	__set_bit(BTN_Z, input_dev->keybit);
+	__set_bit(BTN_START, input_dev->keybit);
+	__set_bit(BTN_TRIGGER_HAPPY3, input_dev->keybit);
+	__set_bit(BTN_TRIGGER_HAPPY4, input_dev->keybit);
+	__set_bit(BTN_TRIGGER_HAPPY1, input_dev->keybit);
+	__set_bit(BTN_TRIGGER_HAPPY2, input_dev->keybit);
 
 	tsn64->irq = gpio_to_irq(tsn64->irq_gpio);
 	if (irq < 0) {
@@ -211,7 +238,6 @@ static int tsn64_probe(struct i2c_client *client,
 		dev_err(&client->dev, "Failed to register input device\n");
 		goto err_free_irq;
 	}
-
 
 	printk(KERN_INFO "TS-64: Loaded\n");
 
