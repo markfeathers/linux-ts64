@@ -132,11 +132,9 @@ static irqreturn_t ts64_irq_thread(int irq, void *dev_id)
 		input_report_key(tsn64->input_dev, BTN_TRIGGER_HAPPY1, status & (1 << CON_DL));
 		input_report_key(tsn64->input_dev, BTN_TRIGGER_HAPPY2, status & (1 << CON_DR));
 
-		input_report_abs(tsn64->input_dev, ABS_X, (status >> ANA_X_OFFSET) & ANA_MASK);
-		input_report_abs(tsn64->input_dev, ABS_Y, status & ANA_MASK);
+		input_report_abs(tsn64->input_dev, ABS_X, (s8)((status >> ANA_X_OFFSET) & ANA_MASK));
+		input_report_abs(tsn64->input_dev, ABS_Y, (s8)(status & ANA_MASK));
 		input_sync(tsn64->input_dev);
-
-		printk(KERN_INFO "TS-N64: Got back 0x%X\n", status);
 	} while(gpio_get_value(tsn64->irq_gpio) == 1);
 
 	return IRQ_HANDLED;
